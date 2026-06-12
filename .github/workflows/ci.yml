@@ -34,6 +34,11 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
+      - name: Criar banco de testes
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -c "CREATE DATABASE tasksdb_test;"
+
       - name: Instalar dependências
         working-directory: backend
         run: npm ci
@@ -43,7 +48,6 @@ jobs:
         env:
           DB_HOST: localhost
           DB_PORT: 5432
-          DB_NAME: tasksdb
           DB_USER: postgres
           DB_PASSWORD: postgres
         run: npm test
