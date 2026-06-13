@@ -8,6 +8,8 @@ on:
 
 env:
   AWS_REGION: us-east-1
+  ECR_REPO_API:      tasks-api
+  ECR_REPO_FRONTEND: tasks-frontend
 
 # ════════════════════════════════════════════════════════
 # TIER 1 — Testes e Segurança (paralelos)
@@ -87,22 +89,22 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build imagem da API
-        run: docker build -t tasks-api:${{ github.sha }} ./backend
+        run: docker build -t ${{ env.ECR_REPO_API }}:${{ github.sha }} ./backend
 
       - name: Build imagem do Frontend
-        run: docker build -t tasks-frontend:${{ github.sha }} ./frontend
+        run: docker build -t ${{ env.ECR_REPO_FRONTEND }}:${{ github.sha }} ./frontend
 
       - name: Exportar imagens como artefato
         run: |
-          docker save tasks-api:${{ github.sha }}      | gzip > tasks-api.tar.gz
-          docker save tasks-frontend:${{ github.sha }} | gzip > tasks-frontend.tar.gz
+          docker save ${{ env.ECR_REPO_API }}:${{ github.sha }}      | gzip > api.tar.gz
+          docker save ${{ env.ECR_REPO_FRONTEND }}:${{ github.sha }} | gzip > frontend.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
           name: docker-images
           path: |
-            tasks-api.tar.gz
-            tasks-frontend.tar.gz
+            api.tar.gz
+            frontend.tar.gz
           retention-days: 1
 
 # ════════════════════════════════════════════════════════
@@ -136,70 +138,72 @@ jobs:
         env:
           ECR: ${{ steps.login-ecr.outputs.registry }}
           SHA: ${{ github.sha }}
+          API:      ${{ env.ECR_REPO_API }}
+          FRONTEND: ${{ env.ECR_REPO_FRONTEND }}
         run: |
-          docker load < tasks-api.tar.gz
-          docker tag tasks-api:$SHA $ECR/tasks-api:$SHA
-          docker tag tasks-api:$SHA $ECR/tasks-api:latest
-          docker push $ECR/tasks-api:$SHA
-          docker push $ECR/tasks-api:latest
+          docker load < api.tar.gz
+          docker tag $API:$SHA $ECR/$API:$SHA
+          docker tag $API:$SHA $ECR/$API:latest
+          docker push $ECR/$API:$SHA
+          docker push $ECR/$API:latest
 
-          docker load < tasks-frontend.tar.gz
-          docker tag tasks-frontend:$SHA $ECR/tasks-frontend:$SHA
-          docker tag tasks-frontend:$SHA $ECR/tasks-frontend:latest
-          docker push $ECR/tasks-frontend:$SHA
-          docker push $ECR/tasks-frontend:latest
+          docker load < frontend.tar.gz
+          docker tag $FRONTEND:$SHA $ECR/$FRONTEND:$SHA
+          docker tag $FRONTEND:$SHA $ECR/$FRONTEND:latest
+          docker push $ECR/$FRONTEND:$SHA
+          docker push $ECR/$FRONTEND:latest
 
 # ════════════════════════════════════════════════════════
 # TIER 4 — Deploy na EC2
 # ════════════════════════════════════════════════════════
 
-  deploy:
-    name: 🚀 Deploy → EC2
-    runs-on: ubuntu-latest
-    needs: push
-    if: github.event_name == 'push'
-    environment: production
+  # deploy:
+  #   name: 🚀 Deploy → EC2
+  #   runs-on: ubuntu-latest
+  #   needs: push
+  #   if: github.event_name == 'push'
+  #   environment: production
 
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd ~/app
-            aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
-              docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-            docker image prune -f
+  #   steps:
+  #     - name: Deploy via SSH
+  #       uses: appleboy/ssh-action@v1
+  #       with:
+  #         host: ${{ secrets.EC2_HOST }}
+  #         username: ubuntu
+  #         key: ${{ secrets.EC2_SSH_KEY }}
+  #         script: |
+  #           cd ~/app
+  #           aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+  #             docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+  #           docker compose -f docker-compose.prod.yml pull
+  #           docker compose -f docker-compose.prod.yml up -d --remove-orphans
+  #           docker image prune -f
 
 # ════════════════════════════════════════════════════════
 # TIER 5 — Verificação pós-deploy
 # ════════════════════════════════════════════════════════
 
-  healthcheck:
-    name: ✅ Health Check
-    runs-on: ubuntu-latest
-    needs: deploy
-    if: github.event_name == 'push'
+  # healthcheck:
+  #   name: ✅ Health Check
+  #   runs-on: ubuntu-latest
+  #   needs: deploy
+  #   if: github.event_name == 'push'
 
-    steps:
-      - name: Aguardar inicialização
-        run: sleep 15
+  #   steps:
+  #     - name: Aguardar inicialização
+  #       run: sleep 15
 
-      - name: Verificar endpoint /health
-        run: |
-          echo "Verificando aplicação em ${{ secrets.EC2_HOST }}..."
-          for i in {1..10}; do
-            echo "Tentativa $i/10"
-            if curl -sf --max-time 5 http://${{ secrets.EC2_HOST }}:3000/health; then
-              echo ""
-              echo "Aplicação respondendo — deploy concluído com sucesso!"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Aplicação não respondeu após 10 tentativas (100s)"
-          exit 1
+  #     - name: Verificar endpoint /health
+  #       run: |
+  #         echo "Verificando aplicação em ${{ secrets.EC2_HOST }}..."
+  #         for i in {1..10}; do
+  #           echo "Tentativa $i/10"
+  #           if curl -sf --max-time 5 http://${{ secrets.EC2_HOST }}:3000/health; then
+  #             echo ""
+  #             echo "Aplicação respondendo — deploy concluído com sucesso!"
+  #             exit 0
+  #           fi
+  #           sleep 10
+  #         done
+  #         echo "Aplicação não respondeu após 10 tentativas (100s)"
+  #         exit 1
