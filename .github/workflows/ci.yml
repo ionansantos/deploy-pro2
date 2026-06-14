@@ -67,14 +67,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Gitleaks — verificar secrets expostos
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.24.3 dir \
+            --config /repo/.gitleaks.toml \
+            --redact \
+            /repo
 
 # ════════════════════════════════════════════════════════
 # TIER 2 — Build (só depois de test + security passarem)
